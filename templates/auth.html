@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jeevraksha - Blood Donation & Emergency Receiving</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<div class="auth-container">
+  
+  <!-- LEFT PANEL: Visuals, Brand Logo & Inspiring Quote -->
+  <div class="auth-visual-panel">
+    <!-- Ambient geometric art styling -->
+    <div class="auth-bg-art">
+      <div class="auth-circle circle-1"></div>
+      <div class="auth-circle circle-2"></div>
+      <svg class="pulse-line-svg" viewBox="0 0 800 120" preserveAspectRatio="none">
+        <path d="M 0 60 Q 150 60 200 60 L 220 20 L 235 100 L 255 10 L 275 80 L 290 60 L 500 60 L 520 20 L 535 100 L 555 10 L 575 80 L 590 60 L 800 60" 
+              fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+
+    <!-- Top Brand Logo -->
+    <div class="auth-visual-header">
+      <a href="/" class="brand-logo brand-light">
+        <span class="brand-drop-icon">
+          <!-- Minimalist Blood Drop Icon -->
+          <svg viewBox="0 0 24 24">
+            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+          </svg>
+        </span>
+        <span>Jeevraksha</span>
+      </a>
+    </div>
+
+    <!-- Centered Inspiring Quote & Lifeline Message -->
+    <div class="auth-visual-body">
+      <div class="quote-mark">“</div>
+      <h1 class="inspiring-quote">
+        A single drop of your blood can be a lifetime for someone else. Be the lifeline.
+      </h1>
+      <div class="quote-author">
+        National Blood Transfusion Council Initiative
+      </div>
+    </div>
+
+    <!-- Trust Metrics / Badges -->
+    <div class="auth-trust-grid">
+      <div class="trust-item">
+        <div class="trust-item-value">100%</div>
+        <div class="trust-item-label">Verified Medical Donors</div>
+      </div>
+      <div class="trust-item">
+        <div class="trust-item-value">&lt; 3 mins</div>
+        <div class="trust-item-label">Smart Match Speed</div>
+      </div>
+      <div class="trust-item">
+        <div class="trust-item-value">24 / 7</div>
+        <div class="trust-item-label">Emergency Lifeline</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL: Split-Screen Authentication Form -->
+  <div class="auth-form-panel">
+    <div class="auth-form-wrapper">
+      
+      <!-- Top Switcher Tabs -->
+      <div class="auth-toggle-tabs">
+        <button type="button" class="auth-tab-btn {% if initial_mode != 'register' %}active{% endif %}" id="tabBtnLogin" onclick="switchAuthTab('login')">
+          Log In
+        </button>
+        <button type="button" class="auth-tab-btn {% if initial_mode == 'register' %}active{% endif %}" id="tabBtnRegister" onclick="switchAuthTab('register')">
+          Create Account
+        </button>
+      </div>
+
+      <!-- Alert Banner for Backend & Real-time Errors -->
+      <div id="authAlert" class="alert-banner" role="alert">
+        <span id="alertIcon">⚠️</span>
+        <span id="alertMessage"></span>
+      </div>
+
+      <!-- ================= LOGIN FORM ================= -->
+      <form id="loginForm" class="auth-form-content" onsubmit="handleLoginSubmit(event)" style="{% if initial_mode == 'register' %}display: none;{% endif %}">
+        <div class="auth-form-header">
+          <h2>Welcome back</h2>
+          <p>Sign in to respond to blood requests or manage emergencies.</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="loginEmail">Email Address <span class="required">*</span></label>
+          <input type="email" id="loginEmail" name="email" class="form-control" placeholder="e.g. yourname@domain.com" required autocomplete="email">
+          <span class="form-error" id="loginEmailError"></span>
+        </div>
+
+        <div class="form-group">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label class="form-label" for="loginPassword" style="margin-bottom: 0;">Password <span class="required">*</span></label>
+            <a href="javascript:void(0)" onclick="alertDemoCredentials()" style="font-size: 0.78rem; font-weight: 500;">Need demo login?</a>
+          </div>
+          <input type="password" id="loginPassword" name="password" class="form-control" placeholder="Enter your account password" required autocomplete="current-password">
+          <span class="form-error" id="loginPasswordError"></span>
+        </div>
+
+        <button type="submit" id="loginSubmitBtn" class="btn btn-primary btn-block btn-lg" style="margin-top: 10px;">
+          <span>Sign In to Dashboard</span>
+        </button>
+
+        <p style="text-align: center; margin-top: 24px; font-size: 0.85rem; color: var(--text-muted);">
+          Don't have an account yet? 
+          <a href="javascript:void(0)" onclick="switchAuthTab('register')" style="font-weight: 600;">Register as a donor</a>
+        </p>
+
+        <div style="text-align: center; margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--border-color);">
+          <a href="/admin/login" style="font-size: 0.78rem; color: var(--text-muted); font-weight: 500; display: inline-flex; align-items: center; gap: 5px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            Staff & Administrator Portal
+          </a>
+        </div>
+      </form>
+
+      <!-- ================= REGISTER FORM ================= -->
+      <form id="registerForm" class="auth-form-content" onsubmit="handleRegisterSubmit(event)" style="{% if initial_mode != 'register' %}display: none;{% endif %}">
+        <div class="auth-form-header">
+          <h2>Join the Lifeline</h2>
+          <p>Register as a verified donor or emergency blood requester.</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="regFullName">Full Legal Name <span class="required">*</span></label>
+          <input type="text" id="regFullName" name="full_name" class="form-control" placeholder="e.g. Dr. Rohan Sharma" required>
+          <span class="form-error" id="regFullNameError"></span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="regEmail">Email Address <span class="required">*</span></label>
+          <input type="email" id="regEmail" name="email" class="form-control" placeholder="e.g. rohan.sharma@example.com" required oninput="validateEmailField(this)">
+          <span class="form-error" id="regEmailError"></span>
+          <span class="form-hint">Disposable email addresses are strictly rejected.</span>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label class="form-label" for="regBloodGroup">Blood Group <span class="required">*</span></label>
+            <select id="regBloodGroup" name="blood_group" class="form-control" required>
+              <option value="" disabled selected>Select Group</option>
+              <option value="A+">A+ (A Positive)</option>
+              <option value="A-">A- (A Negative)</option>
+              <option value="B+">B+ (B Positive)</option>
+              <option value="B-">B- (B Negative)</option>
+              <option value="AB+">AB+ (AB Positive)</option>
+              <option value="AB-">AB- (AB Negative)</option>
+              <option value="O+">O+ (O Positive)</option>
+              <option value="O-">O- (Universal Donor)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="regPhone">Mobile Number <span class="required">*</span></label>
+            <input type="tel" id="regPhone" name="phone" class="form-control" placeholder="10-digit number" maxlength="10" required oninput="validatePhoneField(this)">
+            <span class="form-error" id="regPhoneError"></span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="regCity">City / Location <span class="required">*</span></label>
+          <input type="text" id="regCity" name="city" class="form-control" placeholder="e.g. Mumbai, Delhi, Bangalore" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="regPassword">Password <span class="required">*</span></label>
+          <input type="password" id="regPassword" name="password" class="form-control" placeholder="Create a strong password" required oninput="checkPasswordRules(this.value)">
+          
+          <!-- Live Interactive Password Checklist -->
+          <div class="password-requirements" id="passwordChecklist">
+            <div class="password-requirements-title">Password must contain:</div>
+            <div class="req-item" id="reqLength">
+              <span class="req-icon">✓</span> Minimum 8 characters
+            </div>
+            <div class="req-item" id="reqUpper">
+              <span class="req-icon">✓</span> At least 1 uppercase letter (A-Z)
+            </div>
+            <div class="req-item" id="reqLower">
+              <span class="req-icon">✓</span> At least 1 lowercase letter (a-z)
+            </div>
+            <div class="req-item" id="reqNumber">
+              <span class="req-icon">✓</span> At least 1 number (0-9)
+            </div>
+            <div class="req-item" id="reqSpecial">
+              <span class="req-icon">✓</span> At least 1 special character (!@#$%^&*)
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="regConfirmPassword">Confirm Password <span class="required">*</span></label>
+          <input type="password" id="regConfirmPassword" name="confirm_password" class="form-control" placeholder="Re-type password" required oninput="checkPasswordMatch()">
+          <span class="form-error" id="regConfirmPasswordError"></span>
+        </div>
+
+        <!-- Optional Donor Enrollment Checkbox -->
+        <label class="checkbox-card" style="margin-bottom: 20px;">
+          <input type="checkbox" id="regEnrollDonor" name="register_as_donor" checked>
+          <div class="checkbox-card-text">
+            <strong>Register me as an Active Emergency Donor</strong><br>
+            <span style="color: var(--text-muted); font-size: 0.78rem;">
+              Allow Jeevraksha's algorithm to alert me when critical patients in my city need my blood type.
+            </span>
+          </div>
+        </label>
+
+        <button type="submit" id="regSubmitBtn" class="btn btn-primary btn-block btn-lg">
+          <span>Create Verified Account</span>
+        </button>
+
+        <p style="text-align: center; margin-top: 20px; font-size: 0.85rem; color: var(--text-muted);">
+          Already have an account? 
+          <a href="javascript:void(0)" onclick="switchAuthTab('login')" style="font-weight: 600;">Sign in here</a>
+        </p>
+      </form>
+
+    </div>
+  </div>
+</div>
+
+<!-- Toast Notification Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script>
+  // Helper to prefill or display demo credentials for quick testing
+  function alertDemoCredentials() {
+    showToast('Demo Credentials: Email: aarav.sharma@jeevraksha.org | Password: Lifeline#2026', 'info');
+    document.getElementById('loginEmail').value = 'aarav.sharma@jeevraksha.org';
+    document.getElementById('loginPassword').value = 'Lifeline#2026';
+  }
+</script>
+</body>
+</html>
