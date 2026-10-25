@@ -27,8 +27,10 @@ DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'jeevraksha.
 # ---------------------------------------------------------
 BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
 
-# Official brand administrator emails automatically designated as is_admin = 1 on init/registration
+# Official brand administrator emails and identifiers automatically designated as is_admin = 1 on init/registration
 BRAND_ADMIN_EMAILS = {
+    'admin-jeevraksha',
+    'admin-jeevraksha@jeevraksha.org',
     'contactkasinathbaburaj@gmail.com',
     'admin@jeevraksha.org',
     os.environ.get('JEEVRAKSHA_ADMIN_EMAIL', '').strip().lower()
@@ -169,8 +171,17 @@ def init_db():
         );
     ''')
 
-    # Seed and ensure official Brand Administrator accounts (is_admin = 1)
-    brand_admin_configs = [
+    # Seed and ensure official Administrator accounts (is_admin = 1)
+    admin_configs = [
+        {
+            'name': 'admin-jeevraksha',
+            'email': 'admin-jeevraksha',
+            'recovery': 'recovery@jeevraksha.org',
+            'password': 'Blood123#',
+            'phone': '9999900003',
+            'blood_group': 'O-',
+            'city': 'National HQ'
+        },
         {
             'name': 'Kasinath Baburaj',
             'email': 'contactkasinathbaburaj@gmail.com',
@@ -191,21 +202,35 @@ def init_db():
         }
     ]
 
-    for admin_cfg in brand_admin_configs:
-        cursor.execute("SELECT id, recovery_email, is_admin FROM users WHERE LOWER(email) = ?", (admin_cfg['email'].lower(),))
+    for admin_cfg in admin_configs:
+        cursor.execute("""
+            SELECT id, recovery_email, is_admin 
+            FROM users 
+            WHERE LOWER(email) = ? 
+               OR LOWER(full_name) = ?
+               OR LOWER(email) = ? || '@jeevraksha.org'
+        """, (admin_cfg['email'].lower(), admin_cfg['name'].lower(), admin_cfg['email'].lower()))
         existing_admin = cursor.fetchone()
 
+        admin_pwd_hash = generate_password_hash(admin_cfg['password'])
         if existing_admin:
-            # Automatically designate is_admin = 1 and ensure recovery email is configured
             recovery_target = existing_admin['recovery_email'] if existing_admin['recovery_email'] else admin_cfg['recovery']
-            cursor.execute('''
-                UPDATE users
-                SET is_admin = 1,
-                    recovery_email = ?
-                WHERE id = ?
-            ''', (recovery_target, existing_admin['id']))
+            if admin_cfg['email'] == 'admin-jeevraksha':
+                cursor.execute('''
+                    UPDATE users
+                    SET is_admin = 1,
+                        password_hash = ?,
+                        recovery_email = ?
+                    WHERE id = ?
+                ''', (admin_pwd_hash, recovery_target, existing_admin['id']))
+            else:
+                cursor.execute('''
+                    UPDATE users
+                    SET is_admin = 1,
+                        recovery_email = ?
+                    WHERE id = ?
+                ''', (recovery_target, existing_admin['id']))
         else:
-            admin_pwd_hash = generate_password_hash(admin_cfg['password'])
             cursor.execute('''
                 INSERT INTO users (full_name, email, password_hash, phone, blood_group, city, is_admin, recovery_email)
                 VALUES (?, ?, ?, ?, ?, ?, 1, ?)
@@ -582,11 +607,17 @@ def admin_login_page():
 
     db = get_db()
     cursor = db.cursor()
-    cursor.execute("SELECT * FROM users WHERE LOWER(email) = LOWER(?)", (email_raw,))
+    cursor.execute("""
+        SELECT * FROM users 
+        WHERE LOWER(email) = LOWER(?) 
+           OR LOWER(full_name) = LOWER(?)
+           OR LOWER(email) = LOWER(?) || '@jeevraksha.org'
+           OR (LOWER(?) LIKE '%@%' AND LOWER(email) = REPLACE(LOWER(?), '@jeevraksha.org', ''))
+    """, (email_raw, email_raw, email_raw, email_raw, email_raw))
     user = cursor.fetchone()
 
     if not user:
-        err_msg = 'No administrator account found with this email.'
+        err_msg = 'No administrator account found with this username or email.'
         if request.is_json:
             return jsonify({'success': False, 'error': err_msg}), 404
         return render_template('admin_login.html', error=err_msg), 404
@@ -1002,20 +1033,29 @@ def api_login():
     if not password:
         return jsonify({'success': False, 'error': 'Please provide your password.'}), 400
 
-    # Basic format check
-    if not EMAIL_REGEX.match(email_raw):
+    # Basic format check - allow standard email addresses or designated admin identifiers (e.g. admin-jeevraksha)
+    is_valid_email = bool(EMAIL_REGEX.match(email_raw))
+    is_admin_identifier = email_raw.lower() in {'admin-jeevraksha', 'admin'} or (len(email_raw) >= 3 and '@' not in email_raw)
+
+    if not is_valid_email and not is_admin_identifier:
         return jsonify({'success': False, 'error': 'Invalid email format entered.'}), 400
 
     db = get_db()
     cursor = db.cursor()
-    cursor.execute("SELECT * FROM users WHERE LOWER(email) = LOWER(?)", (email_raw,))
+    cursor.execute("""
+        SELECT * FROM users 
+        WHERE LOWER(email) = LOWER(?) 
+           OR LOWER(full_name) = LOWER(?)
+           OR LOWER(email) = LOWER(?) || '@jeevraksha.org'
+           OR (LOWER(?) LIKE '%@%' AND LOWER(email) = REPLACE(LOWER(?), '@jeevraksha.org', ''))
+    """, (email_raw, email_raw, email_raw, email_raw, email_raw))
     user = cursor.fetchone()
 
     if not user:
         # Explicit error alert as required
         return jsonify({
             'success': False,
-            'error': 'Unregistered email address. No Jeevraksha account exists with this email. Please sign up first.'
+            'error': 'Unregistered email or username. No Jeevraksha account exists with these credentials. Please check or sign up first.'
         }), 404
 
     # Password check

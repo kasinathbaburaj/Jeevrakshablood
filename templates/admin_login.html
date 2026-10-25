@@ -103,9 +103,9 @@
       <!-- Demo Credentials Helper Pill -->
       <div class="demo-admin-badge">
         <div>
-          <strong>Master Admin Credentials:</strong><br>
-          <span style="font-family: monospace;">admin@jeevraksha.org</span> / <span style="font-family: monospace;">Admin@Jeevraksha2026</span><br>
-          <span style="font-size: 0.72rem; opacity: 0.85;">Recovery Email: recovery@jeevraksha.org</span>
+          <strong>Default Admin Credentials:</strong><br>
+          <span style="font-family: monospace;">admin-jeevraksha</span> / <span style="font-family: monospace;">Blood123#</span><br>
+          <span style="font-size: 0.72rem; opacity: 0.85;">(Also accepts admin@jeevraksha.org)</span>
         </div>
         <button type="button" class="btn btn-secondary btn-sm" onclick="fillAdminDemo()" style="padding: 4px 10px; font-size: 0.75rem;">
           Autofill
@@ -121,8 +121,8 @@
       <form id="adminLoginForm" onsubmit="handleAdminLogin(event)">
         
         <div class="form-group">
-          <label class="form-label" for="adminEmail">Administrator Email <span class="required">*</span></label>
-          <input type="email" id="adminEmail" name="email" class="form-control" placeholder="admin@jeevraksha.org" required autocomplete="username">
+          <label class="form-label" for="adminEmail">Administrator Username / Email <span class="required">*</span></label>
+          <input type="text" id="adminEmail" name="email" class="form-control" placeholder="admin-jeevraksha or email" required autocomplete="username">
         </div>
 
         <div class="form-group" style="margin-bottom: 8px;">
@@ -161,9 +161,9 @@
 
 <script>
   function fillAdminDemo() {
-    document.getElementById('adminEmail').value = 'admin@jeevraksha.org';
-    document.getElementById('adminPassword').value = 'Admin@Jeevraksha2026';
-    showToast('Admin credentials filled!', 'info');
+    document.getElementById('adminEmail').value = 'admin-jeevraksha';
+    document.getElementById('adminPassword').value = 'Blood123#';
+    showToast('Admin credentials filled: admin-jeevraksha / Blood123#', 'info');
   }
 
   async function handleAdminLogin(event) {

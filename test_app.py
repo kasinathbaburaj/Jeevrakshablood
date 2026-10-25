@@ -397,6 +397,46 @@ class JeevrakshaTestSuite(unittest.TestCase):
         self.assertEqual(admin_db_res.status_code, 200)
         self.assertIn(b'Master DB Console', admin_db_res.data)
 
+    def test_13_default_admin_jeevraksha_login(self):
+        # 1. Test wrong password for admin-jeevraksha
+        wrong_res = self.client.post('/admin/login', json={
+            'email': 'admin-jeevraksha',
+            'password': 'WrongPassword#999'
+        })
+        self.assertEqual(wrong_res.status_code, 401)
+
+        # 2. Test successful authentication via /admin/login with identifier 'admin-jeevraksha'
+        admin_login = self.client.post('/admin/login', json={
+            'email': 'admin-jeevraksha',
+            'password': 'Blood123#'
+        })
+        self.assertEqual(admin_login.status_code, 200)
+        admin_data = admin_login.get_json()
+        self.assertTrue(admin_data['success'])
+        self.assertIn('/admin/db', admin_data['redirect'])
+
+        # 3. Test access to Admin DB console with this session
+        db_page = self.client.get('/admin/db')
+        self.assertEqual(db_page.status_code, 200)
+        self.assertIn(b'Master DB Console', db_page.data)
+
+        # 4. Clear session and test logging in via main /api/auth/login with 'admin-jeevraksha'
+        self.client.get('/admin/logout')
+        main_login = self.client.post('/api/auth/login', json={
+            'email': 'admin-jeevraksha',
+            'password': 'Blood123#'
+        })
+        self.assertEqual(main_login.status_code, 200)
+        main_data = main_login.get_json()
+        self.assertTrue(main_data['success'])
+        # Admin is immediately directed to the admin DB console
+        self.assertIn('/admin/db', main_data['redirect'])
+
+        # 5. Verify seamless access to the main dashboard as well
+        dash_page = self.client.get('/dashboard')
+        self.assertEqual(dash_page.status_code, 200)
+        self.assertIn(b'Backend DB View', dash_page.data)
+
 
 if __name__ == '__main__':
     unittest.main()
