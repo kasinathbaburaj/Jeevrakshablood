@@ -123,6 +123,12 @@ function switchAuthTab(tab) {
     if (tabBtnLogin) tabBtnLogin.classList.add('active');
     history.replaceState(null, '', '/login');
   }
+
+  // Smoothly scroll back to top of form panel when switching views
+  const authFormPanel = document.querySelector('.auth-form-panel');
+  if (authFormPanel) {
+    authFormPanel.scrollTop = 0;
+  }
 }
 
 function showAuthAlert(message, type = 'danger') {
