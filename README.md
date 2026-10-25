@@ -86,10 +86,10 @@
   - **In-Console Settings Modal:** Modify the administrator username, primary login email, password, and recovery email directly from the top bar in `/admin/db`.
   - **Password Reset via Recovery Email (`/admin/reset-password`):** If locked out, administrators can verify their identity using their registered **Recovery Email** and set a new password and username.
   - **CLI Management Utility (`change_admin.py`):** Change admin credentials or promote users via the terminal.
-- **Full User Management (`/admin/user/add`, `/admin/user/delete/<id>`):**
+- **Full User Management (`/admin/user/add`, `/admin/user/delete/<id>`, `/admin/users/bulk-delete`):**
   - **Add New User Modal:** Allows administrators to manually provision users directly from the console with full name, email/username, phone, blood group, city, strong password, optional administrator privileges (`is_admin = 1`), and automatic enrollment into the verified donor registry (`donors` table).
-  - **Delete User Action:** Dedicated delete button with modal confirmation for each user in the `users` table. Automatically cascades cleanup across `donors`, `blood_requests`, and `donations_log`.
-  - **Administrator Self-Deletion Guard:** Enforces strict server-side protection preventing the currently authenticated administrator from deleting their own account.
+  - **Single & Bulk User Deletion:** Dedicated single-user delete actions as well as multi-select checkboxes with a "Select All" master checkbox and "Delete Selected (<count>)" bulk submit button. Performs atomic batch removal across `users`, `donors`, `blood_requests`, and `donations_log` within a single database transaction.
+  - **Administrator Self-Deletion Guard:** Enforces strict server-side protection preventing the currently authenticated administrator from deleting their own account (both individually and during bulk operations).
 - **Tables Visualized & Managed:**
   - `users`: ID, Role (`is_admin`), Name, Email, Recovery Email, full Werkzeug Password Hashes (with one-click copy), Phone, Blood Group, City, Created At, and Actions (Delete User).
   - `donors`: ID, User FK, Blood Group, Age, Weight, Last Donation Date, Availability status, Medical Verification, Location.

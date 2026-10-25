@@ -404,83 +404,101 @@
     <!-- ================= TABLE 1: USERS ================= -->
     <div id="section-users" class="admin-table-section">
       <div class="sql-table-card">
-        <div class="sql-table-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-          <div>
-            <h3 style="margin-bottom: 2px;">
-              Table: <code>users</code>
-            </h3>
-            <span style="font-size: 0.82rem; color: var(--text-muted);">
-              Stores user identity, hashed credentials via <code>werkzeug.security</code>, and contact info.
-            </span>
+        <form id="bulkUserForm" action="{{ url_for('admin_bulk_delete_users') }}" method="POST" onsubmit="return confirmBulkDelete(event)">
+          <div class="sql-table-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div>
+              <h3 style="margin-bottom: 2px;">
+                Table: <code>users</code>
+              </h3>
+              <span style="font-size: 0.82rem; color: var(--text-muted);">
+                Stores user identity, hashed credentials via <code>werkzeug.security</code>, and contact info.
+              </span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <button type="submit" id="btnBulkDelete" class="btn btn-outline btn-sm" disabled style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; padding: 7px 14px; color: var(--danger); border-color: #FCA5A5; opacity: 0.5; cursor: not-allowed; transition: all 0.2s ease;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                <span>Delete Selected (<span id="selectedUserCount">0</span>)</span>
+              </button>
+              <button type="button" class="btn btn-primary btn-sm" onclick="openAddUserModal()" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; padding: 7px 14px;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <span>Add New User</span>
+              </button>
+            </div>
           </div>
-          <button type="button" class="btn btn-primary btn-sm" onclick="openAddUserModal()" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; padding: 7px 14px;">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-            <span>Add New User</span>
-          </button>
-        </div>
-        <div class="table-responsive">
-          <table class="admin-sql-table" id="table-users">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Role</th>
-                <th>Full Name</th>
-                <th>Email Address</th>
-                <th>Recovery Email</th>
-                <th>Password Hash (Werkzeug)</th>
-                <th>Phone</th>
-                <th>Blood Group</th>
-                <th>City</th>
-                <th>Created At</th>
-                <th style="text-align: center; min-width: 100px;">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for u in users %}
-              <tr id="user-row-{{ u.id }}">
-                <td><strong>#{{ u.id }}</strong></td>
-                <td>
-                  {% if u.is_admin %}
-                    <span style="background: #FEE2E2; color: #991B1B; font-weight: 700; padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; border: 1px solid #FCA5A5;">Master Admin</span>
-                  {% else %}
-                    <span style="color: var(--text-muted); font-size: 0.76rem;">User</span>
-                  {% endif %}
-                </td>
-                <td><strong style="color: var(--text-main);">{{ u.full_name }}</strong></td>
-                <td>{{ u.email }}</td>
-                <td>
-                  {% if u.recovery_email %}
-                    <span style="color: #1E40AF; font-size: 0.78rem; font-family: monospace;">{{ u.recovery_email }}</span>
-                  {% else %}
-                    <span style="color: var(--text-light); font-size: 0.75rem;">—</span>
-                  {% endif %}
-                </td>
-                <td>
-                  <span class="code-chip" title="{{ u.password_hash }}" onclick="copyToClipboard('{{ u.password_hash }}')">
-                    {{ u.password_hash[:26] }}...
-                  </span>
-                </td>
-                <td>{{ u.phone }}</td>
-                <td><span class="user-blood-badge">{{ u.blood_group }}</span></td>
-                <td>{{ u.city }}</td>
-                <td style="color: var(--text-muted); font-size: 0.78rem;">{{ u.created_at }}</td>
-                <td style="text-align: center; white-space: nowrap;">
-                  {% if u.id == current_admin.id %}
-                    <span style="font-size: 0.72rem; color: var(--text-muted); background: var(--bg-secondary); padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border-color); font-weight: 500;">You (Current)</span>
-                  {% else %}
-                    <button type="button" class="btn btn-outline btn-sm" onclick="adminDeleteUser({{ u.id }}, '{{ u.full_name | replace("'", "\\'") }}')" title="Delete this user record" style="padding: 3px 8px; font-size: 0.74rem; color: var(--danger); border-color: #FCA5A5; display: inline-flex; align-items: center; gap: 4px;">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                      Delete
-                    </button>
-                  {% endif %}
-                </td>
-              </tr>
-              {% else %}
-              <tr><td colspan="11" style="text-align: center; color: var(--text-muted); padding: 25px;">No users found in database.</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
+          <div class="table-responsive">
+            <table class="admin-sql-table" id="table-users">
+              <thead>
+                <tr>
+                  <th style="width: 44px; text-align: center;">
+                    <input type="checkbox" id="selectAllUsers" onclick="toggleSelectAllUsers(this)" title="Select All Users" style="cursor: pointer; width: 16px; height: 16px; accent-color: var(--primary);">
+                  </th>
+                  <th>ID</th>
+                  <th>Role</th>
+                  <th>Full Name</th>
+                  <th>Email Address</th>
+                  <th>Recovery Email</th>
+                  <th>Password Hash (Werkzeug)</th>
+                  <th>Phone</th>
+                  <th>Blood Group</th>
+                  <th>City</th>
+                  <th>Created At</th>
+                  <th style="text-align: center; min-width: 100px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for u in users %}
+                <tr id="user-row-{{ u.id }}">
+                  <td style="text-align: center;">
+                    {% if u.id == current_admin.id %}
+                      <input type="checkbox" disabled title="Cannot delete your active administrator account" style="cursor: not-allowed; opacity: 0.35; width: 16px; height: 16px;">
+                    {% else %}
+                      <input type="checkbox" name="user_ids" value="{{ u.id }}" class="user-select-checkbox" onchange="updateBulkDeleteState()" style="cursor: pointer; width: 16px; height: 16px; accent-color: var(--primary);">
+                    {% endif %}
+                  </td>
+                  <td><strong>#{{ u.id }}</strong></td>
+                  <td>
+                    {% if u.is_admin %}
+                      <span style="background: #FEE2E2; color: #991B1B; font-weight: 700; padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; border: 1px solid #FCA5A5;">Master Admin</span>
+                    {% else %}
+                      <span style="color: var(--text-muted); font-size: 0.76rem;">User</span>
+                    {% endif %}
+                  </td>
+                  <td><strong style="color: var(--text-main);">{{ u.full_name }}</strong></td>
+                  <td>{{ u.email }}</td>
+                  <td>
+                    {% if u.recovery_email %}
+                      <span style="color: #1E40AF; font-size: 0.78rem; font-family: monospace;">{{ u.recovery_email }}</span>
+                    {% else %}
+                      <span style="color: var(--text-light); font-size: 0.75rem;">—</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <span class="code-chip" title="{{ u.password_hash }}" onclick="copyToClipboard('{{ u.password_hash }}')">
+                      {{ u.password_hash[:26] }}...
+                    </span>
+                  </td>
+                  <td>{{ u.phone }}</td>
+                  <td><span class="user-blood-badge">{{ u.blood_group }}</span></td>
+                  <td>{{ u.city }}</td>
+                  <td style="color: var(--text-muted); font-size: 0.78rem;">{{ u.created_at }}</td>
+                  <td style="text-align: center; white-space: nowrap;">
+                    {% if u.id == current_admin.id %}
+                      <span style="font-size: 0.72rem; color: var(--text-muted); background: var(--bg-secondary); padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border-color); font-weight: 500;">You (Current)</span>
+                    {% else %}
+                      <button type="button" class="btn btn-outline btn-sm" onclick="adminDeleteUser({{ u.id }}, '{{ u.full_name | replace("'", "\\'") }}')" title="Delete this user record" style="padding: 3px 8px; font-size: 0.74rem; color: var(--danger); border-color: #FCA5A5; display: inline-flex; align-items: center; gap: 4px;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        Delete
+                      </button>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="12" style="text-align: center; color: var(--text-muted); padding: 25px;">No users found in database.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </form>
       </div>
     </div>
 
@@ -952,6 +970,82 @@
       }
     }
 
+    function toggleSelectAllUsers(masterCheckbox) {
+      const checkboxes = document.querySelectorAll('.user-select-checkbox');
+      checkboxes.forEach(cb => {
+        if (!cb.disabled) {
+          cb.checked = masterCheckbox.checked;
+          const row = document.getElementById(`user-row-${cb.value}`);
+          if (row) {
+            row.style.backgroundColor = cb.checked ? 'rgba(217, 4, 41, 0.05)' : '';
+          }
+        }
+      });
+      updateBulkDeleteState();
+    }
+
+    function updateBulkDeleteState() {
+      const allCheckboxes = document.querySelectorAll('.user-select-checkbox:not(:disabled)');
+      const checkedBoxes = document.querySelectorAll('.user-select-checkbox:checked');
+      const count = checkedBoxes.length;
+
+      const countSpan = document.getElementById('selectedUserCount');
+      if (countSpan) countSpan.textContent = count;
+
+      const bulkBtn = document.getElementById('btnBulkDelete');
+      if (bulkBtn) {
+        if (count > 0) {
+          bulkBtn.disabled = false;
+          bulkBtn.style.opacity = '1';
+          bulkBtn.style.cursor = 'pointer';
+        } else {
+          bulkBtn.disabled = true;
+          bulkBtn.style.opacity = '0.5';
+          bulkBtn.style.cursor = 'not-allowed';
+        }
+      }
+
+      // Update individual row background highlights
+      allCheckboxes.forEach(cb => {
+        const row = document.getElementById(`user-row-${cb.value}`);
+        if (row) {
+          row.style.backgroundColor = cb.checked ? 'rgba(217, 4, 41, 0.05)' : '';
+        }
+      });
+
+      // Synchronize master checkbox state
+      const master = document.getElementById('selectAllUsers');
+      if (master && allCheckboxes.length > 0) {
+        if (count === allCheckboxes.length) {
+          master.checked = true;
+          master.indeterminate = false;
+        } else if (count > 0) {
+          master.checked = false;
+          master.indeterminate = true;
+        } else {
+          master.checked = false;
+          master.indeterminate = false;
+        }
+      }
+    }
+
+    function confirmBulkDelete(event) {
+      const checkedBoxes = document.querySelectorAll('.user-select-checkbox:checked');
+      if (checkedBoxes.length === 0) {
+        event.preventDefault();
+        showAdminToast('Please select at least one user to delete.', 'error');
+        return false;
+      }
+
+      const count = checkedBoxes.length;
+      const ok = confirm(`Are you sure you want to permanently delete ${count} selected user(s)?\n\nThis will remove their user accounts, registered donor profiles, and related blood requests from the database.`);
+      if (!ok) {
+        event.preventDefault();
+        return false;
+      }
+      return true;
+    }
+
     async function adminDeleteUser(userId, userName) {
       if (!confirm(`Are you sure you want to permanently delete user #${userId} (${userName})?\nThis will remove their account and all associated donor records.`)) {
         return;
@@ -970,7 +1064,10 @@
           if (row) {
             row.style.transition = 'all 0.3s ease';
             row.style.backgroundColor = '#FEE2E2';
-            setTimeout(() => row.remove(), 300);
+            setTimeout(() => {
+              row.remove();
+              updateBulkDeleteState();
+            }, 300);
           }
           // Update badge count
           const badge = document.getElementById('badgeUserCount');

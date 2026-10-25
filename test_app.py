@@ -541,6 +541,100 @@ class JeevrakshaTestSuite(unittest.TestCase):
         self.assertIsNone(c.fetchone())
         conn.close()
 
+    def test_15_admin_bulk_user_deletion(self):
+        # 1. Unauthenticated blocked
+        unauth_bulk = self.client.post('/admin/users/bulk-delete', json={'user_ids': [1, 2]})
+        self.assertEqual(unauth_bulk.status_code, 401)
+
+        # 2. Non-admin user blocked (403)
+        with self.client.session_transaction() as sess:
+            sess['user_id'] = 2
+            sess['is_admin'] = False
+        non_admin_bulk = self.client.post('/admin/users/bulk-delete', json={'user_ids': [1, 2]})
+        self.assertEqual(non_admin_bulk.status_code, 403)
+
+        # 3. Authenticate as admin
+        admin_login = self.client.post('/admin/login', json={
+            'email': 'admin-jeevraksha',
+            'password': 'Blood123#'
+        })
+        self.assertEqual(admin_login.status_code, 200)
+
+        # 4. Create 3 test users
+        ts = int(time.time() * 1000)
+        u1 = self.client.post('/admin/user/add', json={
+            'full_name': 'Bulk Target One',
+            'email': f'bulk1_{ts}@test.org',
+            'phone': f'91{ts % 100000000:08d}',
+            'blood_group': 'A+',
+            'city': 'Delhi',
+            'password': 'Password#123'
+        }).get_json()['user_id']
+
+        ts2 = ts + 1
+        u2 = self.client.post('/admin/user/add', json={
+            'full_name': 'Bulk Target Two',
+            'email': f'bulk2_{ts2}@test.org',
+            'phone': f'92{ts2 % 100000000:08d}',
+            'blood_group': 'B+',
+            'city': 'Delhi',
+            'password': 'Password#123'
+        }).get_json()['user_id']
+
+        ts3 = ts + 2
+        u3 = self.client.post('/admin/user/add', json={
+            'full_name': 'Bulk Target Three',
+            'email': f'bulk3_{ts3}@test.org',
+            'phone': f'93{ts3 % 100000000:08d}',
+            'blood_group': 'O+',
+            'city': 'Delhi',
+            'password': 'Password#123'
+        }).get_json()['user_id']
+
+        # 5. Check admin page renders the bulk deletion form, master checkbox, and delete button
+        db_page = self.client.get('/admin/db')
+        self.assertEqual(db_page.status_code, 200)
+        self.assertIn(b'id="bulkUserForm"', db_page.data)
+        self.assertIn(b'id="btnBulkDelete"', db_page.data)
+        self.assertIn(b'id="selectAllUsers"', db_page.data)
+        self.assertIn(b'class="user-select-checkbox"', db_page.data)
+
+        # 6. Test empty selection
+        empty_bulk = self.client.post('/admin/users/bulk-delete', json={'user_ids': []})
+        self.assertEqual(empty_bulk.status_code, 400)
+        self.assertIn('select at least one user', empty_bulk.get_json()['error'].lower())
+
+        # 7. Test bulk delete JSON API with admin ID + u1 + u2 (admin ID must be guarded & skipped)
+        with self.client.session_transaction() as sess:
+            current_admin_id = sess['user_id']
+
+        bulk_res = self.client.post('/admin/users/bulk-delete', json={
+            'user_ids': [current_admin_id, u1, u2]
+        })
+        self.assertEqual(bulk_res.status_code, 200)
+        data = bulk_res.get_json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['deleted_count'], 2)
+        self.assertTrue(data['skipped_self'])
+
+        # 8. Test standard HTML form POST for u3, returning 302 redirect
+        form_res = self.client.post('/admin/users/bulk-delete', data={
+            'user_ids': [str(u3)]
+        })
+        self.assertEqual(form_res.status_code, 302)
+        self.assertIn('/admin/db', form_res.headers['Location'])
+
+        # 9. Verify in database that u1, u2, u3 are gone, and admin is still intact
+        import sqlite3
+        conn = sqlite3.connect('jeevraksha.db')
+        c = conn.cursor()
+        c.execute("SELECT id FROM users WHERE id IN (?, ?, ?)", (u1, u2, u3))
+        self.assertEqual(len(c.fetchall()), 0)
+
+        c.execute("SELECT id FROM users WHERE id = ?", (current_admin_id,))
+        self.assertIsNotNone(c.fetchone())
+        conn.close()
+
 
 if __name__ == '__main__':
     unittest.main()

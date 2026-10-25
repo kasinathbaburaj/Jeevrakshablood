@@ -491,7 +491,7 @@ def admin_required(f):
     def decorated_function(*args, **kwargs):
         # 1. Check if authenticated
         if 'user_id' not in session:
-            if request.is_json or request.path.startswith('/api/') or request.path.startswith('/admin/api/') or request.path.startswith('/admin/db/') or request.path.startswith('/admin/user/') or request.path == '/admin/seed':
+            if request.is_json or request.path.startswith('/api/') or request.path.startswith('/admin/api/') or request.path.startswith('/admin/db/') or request.path.startswith('/admin/user') or request.path == '/admin/seed':
                 return jsonify({'success': False, 'error': '401 Unauthorized: Administrator authentication required.'}), 401
             return redirect(url_for('admin_login_page', next=request.url))
 
@@ -507,7 +507,7 @@ def admin_required(f):
                 is_admin = True
 
         if not is_admin:
-            if request.is_json or request.path.startswith('/api/') or request.path.startswith('/admin/api/') or request.path.startswith('/admin/db/') or request.path.startswith('/admin/user/') or request.path == '/admin/seed':
+            if request.is_json or request.path.startswith('/api/') or request.path.startswith('/admin/api/') or request.path.startswith('/admin/db/') or request.path.startswith('/admin/user') or request.path == '/admin/seed':
                 return jsonify({'success': False, 'error': '403 Access Denied: Administrator privileges required.'}), 403
             # Normal users attempting to access admin routes are blocked with a 403 redirect
             return redirect(url_for('dashboard_page', access_denied='1')), 403
@@ -1000,6 +1000,89 @@ def admin_delete_user(user_id):
     if is_ajax:
         return jsonify({'success': True, 'message': msg})
     return redirect(url_for('admin_db_page', message=msg))
+
+
+@app.route('/admin/users/bulk-delete', methods=['POST'])
+@app.route('/admin/api/users/bulk-delete', methods=['POST'])
+@admin_required
+def admin_bulk_delete_users():
+    """Bulk deletion of multiple users within a single database transaction."""
+    is_ajax = request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest' or 'application/json' in request.headers.get('Accept', '')
+
+    raw_ids = []
+    if request.is_json:
+        data = request.get_json() or {}
+        raw_ids = data.get('user_ids', [])
+    else:
+        # Standard HTML form submission with checkboxes named 'user_ids'
+        raw_ids = request.form.getlist('user_ids')
+
+    selected_ids = []
+    for item in raw_ids:
+        try:
+            val = int(item)
+            if val not in selected_ids:
+                selected_ids.append(val)
+        except (ValueError, TypeError):
+            continue
+
+    if not selected_ids:
+        err = "Please select at least one user to delete."
+        if is_ajax:
+            return jsonify({'success': False, 'error': err}), 400
+        return redirect(url_for('admin_db_page', error=err))
+
+    current_admin_id = session.get('user_id')
+
+    # Security Guard: Exclude active administrator from bulk deletion
+    skipped_self = False
+    if current_admin_id in selected_ids:
+        selected_ids.remove(current_admin_id)
+        skipped_self = True
+
+    if not selected_ids:
+        err = "Security Guard: Cannot delete your own active administrator account."
+        if is_ajax:
+            return jsonify({'success': False, 'error': err}), 400
+        return redirect(url_for('admin_db_page', error=err))
+
+    db = get_db()
+    cursor = db.cursor()
+
+    try:
+        placeholders = ','.join(['?'] * len(selected_ids))
+
+        # 1. Cascade cleanup across dependent tables in single transaction
+        cursor.execute(f"DELETE FROM donations_log WHERE donor_id IN (SELECT id FROM donors WHERE user_id IN ({placeholders}))", selected_ids)
+        cursor.execute(f"DELETE FROM donors WHERE user_id IN ({placeholders})", selected_ids)
+        cursor.execute(f"DELETE FROM blood_requests WHERE requester_id IN ({placeholders})", selected_ids)
+
+        # 2. Delete selected users
+        cursor.execute(f"DELETE FROM users WHERE id IN ({placeholders})", selected_ids)
+        deleted_count = cursor.rowcount
+
+        db.commit()
+
+        msg = f"Successfully deleted {deleted_count} user(s) in a single transaction."
+        if skipped_self:
+            msg += " (Active administrator account was protected and retained.)"
+
+        if is_ajax:
+            return jsonify({
+                'success': True,
+                'message': msg,
+                'deleted_count': deleted_count,
+                'deleted_ids': selected_ids,
+                'skipped_self': skipped_self
+            })
+        return redirect(url_for('admin_db_page', message=msg))
+
+    except Exception as e:
+        db.rollback()
+        err = f"Database transaction error during bulk deletion: {str(e)}"
+        if is_ajax:
+            return jsonify({'success': False, 'error': err}), 500
+        return redirect(url_for('admin_db_page', error=err))
 
 
 @app.route('/admin/api/change-credentials', methods=['POST'])
