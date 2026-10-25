@@ -491,7 +491,7 @@ def admin_required(f):
     def decorated_function(*args, **kwargs):
         # 1. Check if authenticated
         if 'user_id' not in session:
-            if request.path.startswith('/api/') or request.path.startswith('/admin/api/') or request.path.startswith('/admin/db/') or request.path == '/admin/seed':
+            if request.is_json or request.path.startswith('/api/') or request.path.startswith('/admin/api/') or request.path.startswith('/admin/db/') or request.path.startswith('/admin/user/') or request.path == '/admin/seed':
                 return jsonify({'success': False, 'error': '401 Unauthorized: Administrator authentication required.'}), 401
             return redirect(url_for('admin_login_page', next=request.url))
 
@@ -507,7 +507,7 @@ def admin_required(f):
                 is_admin = True
 
         if not is_admin:
-            if request.path.startswith('/api/') or request.path.startswith('/admin/api/') or request.path.startswith('/admin/db/') or request.path == '/admin/seed':
+            if request.is_json or request.path.startswith('/api/') or request.path.startswith('/admin/api/') or request.path.startswith('/admin/db/') or request.path.startswith('/admin/user/') or request.path == '/admin/seed':
                 return jsonify({'success': False, 'error': '403 Access Denied: Administrator privileges required.'}), 403
             # Normal users attempting to access admin routes are blocked with a 403 redirect
             return redirect(url_for('dashboard_page', access_denied='1')), 403
@@ -863,6 +863,143 @@ def admin_delete_request(req_id):
     db.commit()
 
     return jsonify({'success': True, 'message': f'Request #{req_id} permanently removed.'})
+
+
+# ---------------------------------------------------------
+# ADMIN USER MANAGEMENT (ADD & DELETE)
+# ---------------------------------------------------------
+@app.route('/admin/user/add', methods=['POST'])
+@app.route('/admin/api/user/add', methods=['POST'])
+@admin_required
+def admin_add_user():
+    """Admin route to manually create a new user, donor, or administrator record."""
+    data = request.get_json() if request.is_json else request.form
+
+    full_name = (data.get('full_name') or '').strip()
+    email = (data.get('email') or '').strip().lower()
+    phone = (data.get('phone') or '').strip()
+    blood_group = (data.get('blood_group') or '').strip().upper()
+    city = (data.get('city') or '').strip()
+    password_raw = data.get('password') or ''
+    is_admin = 1 if str(data.get('is_admin', '')).lower() in ('1', 'true', 'on', 'yes') else 0
+    recovery_email = (data.get('recovery_email') or '').strip().lower() or ('recovery@jeevraksha.org' if is_admin else None)
+
+    # Basic validations
+    if not full_name:
+        err = "Full name is required."
+        if request.is_json:
+            return jsonify({'success': False, 'error': err}), 400
+        return redirect(url_for('admin_db_page', error=err))
+
+    if not email:
+        err = "Email address or username identifier is required."
+        if request.is_json:
+            return jsonify({'success': False, 'error': err}), 400
+        return redirect(url_for('admin_db_page', error=err))
+
+    if not phone or len(phone) < 7:
+        err = "A valid phone number (minimum 7 digits) is required."
+        if request.is_json:
+            return jsonify({'success': False, 'error': err}), 400
+        return redirect(url_for('admin_db_page', error=err))
+
+    if blood_group not in BLOOD_GROUPS:
+        blood_group = 'O+' if not blood_group else blood_group
+
+    if not city:
+        city = 'National HQ'
+
+    if not password_raw:
+        err = "Password is required."
+        if request.is_json:
+            return jsonify({'success': False, 'error': err}), 400
+        return redirect(url_for('admin_db_page', error=err))
+
+    # Strict password complexity validation
+    is_valid_pwd, pwd_err = validate_password_strict(password_raw)
+    if not is_valid_pwd:
+        if request.is_json:
+            return jsonify({'success': False, 'error': pwd_err}), 400
+        return redirect(url_for('admin_db_page', error=pwd_err))
+
+    db = get_db()
+    cursor = db.cursor()
+
+    # Check for existing email/username or phone conflicts
+    cursor.execute("SELECT id, email, phone FROM users WHERE LOWER(email) = LOWER(?) OR phone = ?", (email, phone))
+    existing = cursor.fetchone()
+    if existing:
+        if existing['email'].lower() == email.lower():
+            err = f"An account with identifier '{email}' already exists."
+        else:
+            err = f"An account with phone number '{phone}' already exists."
+        if request.is_json:
+            return jsonify({'success': False, 'error': err}), 409
+        return redirect(url_for('admin_db_page', error=err))
+
+    password_hash = generate_password_hash(password_raw)
+
+    cursor.execute('''
+        INSERT INTO users (full_name, email, password_hash, phone, blood_group, city, is_admin, recovery_email)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (full_name, email, password_hash, phone, blood_group, city, is_admin, recovery_email))
+    new_user_id = cursor.lastrowid
+
+    # If requested or non-admin, enroll in active donors registry
+    register_donor = str(data.get('register_donor', '')).lower() in ('1', 'true', 'on', 'yes')
+    if register_donor or not is_admin:
+        cursor.execute('''
+            INSERT INTO donors (user_id, blood_group, age, weight, last_donation_date, is_available, medical_verified, location)
+            VALUES (?, ?, 28, 65.0, NULL, 1, 1, ?)
+        ''', (new_user_id, blood_group, city))
+
+    db.commit()
+
+    role_str = "Administrator" if is_admin else "User / Donor"
+    msg = f"New {role_str} '{full_name}' (#{new_user_id}) successfully created."
+    if request.is_json:
+        return jsonify({'success': True, 'message': msg, 'user_id': new_user_id}), 201
+    return redirect(url_for('admin_db_page', message=msg))
+
+
+@app.route('/admin/user/delete/<int:user_id>', methods=['GET', 'POST'])
+@app.route('/admin/db/user/<int:user_id>/delete', methods=['POST'])
+@admin_required
+def admin_delete_user(user_id):
+    """Admin record deletion for users row with safe cascade."""
+    is_ajax = request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest' or 'application/json' in request.headers.get('Accept', '')
+
+    # Safety Check: Prevent self-deletion of currently logged-in administrator
+    if user_id == session.get('user_id'):
+        err = "Security Guard: You cannot delete your own active administrator account."
+        if is_ajax:
+            return jsonify({'success': False, 'error': err}), 400
+        return redirect(url_for('admin_db_page', error=err))
+
+    db = get_db()
+    cursor = db.cursor()
+
+    # Find the target user
+    cursor.execute("SELECT id, full_name, email, is_admin FROM users WHERE id = ?", (user_id,))
+    target_user = cursor.fetchone()
+
+    if not target_user:
+        err = f"User #{user_id} not found."
+        if is_ajax:
+            return jsonify({'success': False, 'error': err}), 404
+        return redirect(url_for('admin_db_page', error=err))
+
+    # Cascade cleanup
+    cursor.execute("DELETE FROM donations_log WHERE donor_id IN (SELECT id FROM donors WHERE user_id = ?)", (user_id,))
+    cursor.execute("DELETE FROM donors WHERE user_id = ?", (user_id,))
+    cursor.execute("DELETE FROM blood_requests WHERE requester_id = ?", (user_id,))
+    cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    db.commit()
+
+    msg = f"User #{user_id} ({target_user['full_name']} - {target_user['email']}) successfully deleted."
+    if is_ajax:
+        return jsonify({'success': True, 'message': msg})
+    return redirect(url_for('admin_db_page', message=msg))
 
 
 @app.route('/admin/api/change-credentials', methods=['POST'])

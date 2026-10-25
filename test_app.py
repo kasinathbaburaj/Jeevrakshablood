@@ -437,6 +437,110 @@ class JeevrakshaTestSuite(unittest.TestCase):
         self.assertEqual(dash_page.status_code, 200)
         self.assertIn(b'Backend DB View', dash_page.data)
 
+    def test_14_admin_user_management(self):
+        # 1. Unauthenticated blocked from /admin/user/add (401)
+        unauth_add = self.client.post('/admin/user/add', json={
+            'full_name': 'Test Blocked',
+            'email': 'blocked@domain.com',
+            'phone': '9800000099',
+            'blood_group': 'B+',
+            'city': 'Delhi',
+            'password': 'Password#123'
+        })
+        self.assertEqual(unauth_add.status_code, 401)
+
+        # 1b. Normal user (non-admin) blocked from /admin/user/add (403)
+        with self.client.session_transaction() as sess:
+            sess['user_id'] = 1
+            sess['is_admin'] = False
+        forbidden_add = self.client.post('/admin/user/add', json={
+            'full_name': 'Test Forbidden',
+            'email': 'forbidden@domain.com',
+            'phone': '9800000098',
+            'blood_group': 'B+',
+            'city': 'Delhi',
+            'password': 'Password#123'
+        })
+        self.assertEqual(forbidden_add.status_code, 403)
+
+        # 2. Login as admin-jeevraksha
+        admin_login = self.client.post('/admin/login', json={
+            'email': 'admin-jeevraksha',
+            'password': 'Blood123#'
+        })
+        self.assertEqual(admin_login.status_code, 200)
+
+        # 3. Validation failure - weak password
+        weak_add = self.client.post('/admin/user/add', json={
+            'full_name': 'Dr. Alok Verma',
+            'email': 'alok.verma@lifeline.org',
+            'phone': '9812345678',
+            'blood_group': 'AB+',
+            'city': 'Mumbai',
+            'password': 'weak'
+        })
+        self.assertEqual(weak_add.status_code, 400)
+
+        # 4. Valid user creation via /admin/user/add
+        new_email = f"staff.doc.{int(time.time()*1000)}@hospital.org"
+        new_phone = f"97{int(time.time())%100000000:08d}"
+        create_res = self.client.post('/admin/user/add', json={
+            'full_name': 'Dr. Alok Verma',
+            'email': new_email,
+            'phone': new_phone,
+            'blood_group': 'AB+',
+            'city': 'Mumbai',
+            'password': 'DoctorPass#2026',
+            'is_admin': False,
+            'register_donor': True
+        })
+        self.assertEqual(create_res.status_code, 201)
+        create_data = create_res.get_json()
+        self.assertTrue(create_data['success'])
+        created_user_id = create_data['user_id']
+
+        # Verify created user is displayed in /admin/db
+        db_page = self.client.get('/admin/db')
+        self.assertIn(new_email.encode('utf-8'), db_page.data)
+        self.assertIn(b'Add New User', db_page.data)
+        self.assertIn(b'Delete', db_page.data)
+
+        # 5. Admin self-deletion guard
+        with self.client.session_transaction() as sess:
+            current_admin_id = sess['user_id']
+        self_del = self.client.post(f'/admin/user/delete/{current_admin_id}', json={})
+        self.assertEqual(self_del.status_code, 400)
+        self.assertIn('cannot delete your own active administrator account', self_del.get_json()['error'])
+
+        # 6. Delete the newly created user via JSON API
+        del_res = self.client.post(f'/admin/user/delete/{created_user_id}', json={})
+        self.assertEqual(del_res.status_code, 200)
+        self.assertTrue(del_res.get_json()['success'])
+
+        # 7. Test standard browser GET /admin/user/delete/<id> redirects back to /admin/db
+        redirect_test_user = self.client.post('/admin/user/add', json={
+            'full_name': 'Temporary Redirect User',
+            'email': f'temp.{int(time.time()*1000)}@test.org',
+            'phone': f'96{int(time.time())%100000000:08d}',
+            'blood_group': 'O-',
+            'city': 'Delhi',
+            'password': 'TempPassword#2026'
+        }).get_json()['user_id']
+        get_del = self.client.get(f'/admin/user/delete/{redirect_test_user}')
+        self.assertEqual(get_del.status_code, 302)
+        self.assertIn('/admin/db', get_del.headers['Location'])
+
+        # Verify user is deleted
+        import sqlite3
+        conn = sqlite3.connect('jeevraksha.db')
+        c = conn.cursor()
+        c.execute("SELECT id FROM users WHERE id = ?", (created_user_id,))
+        self.assertIsNone(c.fetchone())
+        # Verify donor cascade deletion
+        c.execute("SELECT id FROM donors WHERE user_id = ?", (created_user_id,))
+        self.assertIsNone(c.fetchone())
+        conn.close()
+
 
 if __name__ == '__main__':
     unittest.main()
