@@ -366,6 +366,37 @@ class JeevrakshaTestSuite(unittest.TestCase):
         self.assertEqual(restored_login.status_code, 200)
         self.assertTrue(restored_login.get_json()['success'])
 
+    def test_12_brand_admin_designation(self):
+        # Verify brand admin email contactkasinathbaburaj@gmail.com is designated as admin
+        import sqlite3
+        conn = sqlite3.connect('jeevraksha.db')
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        c.execute("SELECT id, is_admin, recovery_email FROM users WHERE LOWER(email) = 'contactkasinathbaburaj@gmail.com'")
+        brand_admin = c.fetchone()
+        conn.close()
+
+        self.assertIsNotNone(brand_admin)
+        self.assertEqual(brand_admin['is_admin'], 1)
+        self.assertIsNotNone(brand_admin['recovery_email'])
+
+        # Verify login establishes admin session and grants seamless access to dashboard & admin DB
+        with self.client.session_transaction() as sess:
+            sess['user_id'] = brand_admin['id']
+            sess['email'] = 'contactkasinathbaburaj@gmail.com'
+            sess['user_name'] = 'Kasinath Baburaj'
+            sess['blood_group'] = 'O+'
+            sess['is_admin'] = True
+
+        dash_res = self.client.get('/dashboard')
+        self.assertEqual(dash_res.status_code, 200)
+        self.assertIn(b'Backend DB View', dash_res.data)
+        self.assertIn(b'Admin DB', dash_res.data)
+
+        admin_db_res = self.client.get('/admin/db')
+        self.assertEqual(admin_db_res.status_code, 200)
+        self.assertIn(b'Master DB Console', admin_db_res.data)
+
 
 if __name__ == '__main__':
     unittest.main()

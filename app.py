@@ -27,6 +27,14 @@ DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'jeevraksha.
 # ---------------------------------------------------------
 BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
 
+# Official brand administrator emails automatically designated as is_admin = 1 on init/registration
+BRAND_ADMIN_EMAILS = {
+    'contactkasinathbaburaj@gmail.com',
+    'admin@jeevraksha.org',
+    os.environ.get('JEEVRAKSHA_ADMIN_EMAIL', '').strip().lower()
+}
+BRAND_ADMIN_EMAILS = {e for e in BRAND_ADMIN_EMAILS if e}
+
 # Red Blood Cell Compatibility Matrix
 # Key: Recipient Blood Group -> Value: List of Donor Blood Groups that can safely donate to this recipient
 COMPATIBLE_DONORS_FOR_RECIPIENT = {
@@ -161,26 +169,55 @@ def init_db():
         );
     ''')
 
-    # Seed or ensure official Master Administrator account
-    default_admin_email = os.environ.get('JEEVRAKSHA_ADMIN_EMAIL', 'admin@jeevraksha.org').strip().lower()
-    default_admin_pwd = os.environ.get('JEEVRAKSHA_ADMIN_PASSWORD', 'Admin@Jeevraksha2026')
-    default_admin_name = os.environ.get('JEEVRAKSHA_ADMIN_NAME', 'Jeevraksha Master Admin')
-    default_recovery = os.environ.get('JEEVRAKSHA_ADMIN_RECOVERY', 'recovery@jeevraksha.org').strip().lower()
+    # Seed and ensure official Brand Administrator accounts (is_admin = 1)
+    brand_admin_configs = [
+        {
+            'name': 'Kasinath Baburaj',
+            'email': 'contactkasinathbaburaj@gmail.com',
+            'recovery': 'recovery@jeevraksha.org',
+            'password': os.environ.get('JEEVRAKSHA_ADMIN_PASSWORD', 'Admin@Jeevraksha2026'),
+            'phone': '9895000001',
+            'blood_group': 'O+',
+            'city': 'National HQ'
+        },
+        {
+            'name': os.environ.get('JEEVRAKSHA_ADMIN_NAME', 'Jeevraksha Master Admin'),
+            'email': os.environ.get('JEEVRAKSHA_ADMIN_EMAIL', 'admin@jeevraksha.org').strip().lower(),
+            'recovery': os.environ.get('JEEVRAKSHA_ADMIN_RECOVERY', 'recovery@jeevraksha.org').strip().lower(),
+            'password': os.environ.get('JEEVRAKSHA_ADMIN_PASSWORD', 'Admin@Jeevraksha2026'),
+            'phone': '9999900000',
+            'blood_group': 'O-',
+            'city': 'National HQ'
+        }
+    ]
 
-    cursor.execute("SELECT id, recovery_email FROM users WHERE is_admin = 1")
-    admin_row = cursor.fetchone()
-    admin_hash = generate_password_hash(default_admin_pwd)
+    for admin_cfg in brand_admin_configs:
+        cursor.execute("SELECT id, recovery_email, is_admin FROM users WHERE LOWER(email) = ?", (admin_cfg['email'].lower(),))
+        existing_admin = cursor.fetchone()
 
-    if not admin_row:
-        cursor.execute('''
-            INSERT INTO users (full_name, email, password_hash, phone, blood_group, city, is_admin, recovery_email)
-            VALUES (?, ?, ?, ?, ?, ?, 1, ?)
-        ''', (default_admin_name, default_admin_email, admin_hash, "9999900000", "O-", "National HQ", default_recovery))
-    else:
-        if not admin_row['recovery_email']:
+        if existing_admin:
+            # Automatically designate is_admin = 1 and ensure recovery email is configured
+            recovery_target = existing_admin['recovery_email'] if existing_admin['recovery_email'] else admin_cfg['recovery']
             cursor.execute('''
-                UPDATE users SET recovery_email = ? WHERE id = ?
-            ''', (default_recovery, admin_row['id']))
+                UPDATE users
+                SET is_admin = 1,
+                    recovery_email = ?
+                WHERE id = ?
+            ''', (recovery_target, existing_admin['id']))
+        else:
+            admin_pwd_hash = generate_password_hash(admin_cfg['password'])
+            cursor.execute('''
+                INSERT INTO users (full_name, email, password_hash, phone, blood_group, city, is_admin, recovery_email)
+                VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+            ''', (
+                admin_cfg['name'],
+                admin_cfg['email'].lower(),
+                admin_pwd_hash,
+                admin_cfg['phone'],
+                admin_cfg['blood_group'],
+                admin_cfg['city'],
+                admin_cfg['recovery']
+            ))
 
     # Check if demo data is present, if not, seed realistic data for immediate richness
     cursor.execute("SELECT COUNT(*) FROM users WHERE is_admin = 0")
@@ -910,10 +947,12 @@ def api_register():
     password_hash = generate_password_hash(password_raw)
 
     try:
+        is_admin_flag = 1 if email.lower() in BRAND_ADMIN_EMAILS else 0
+        recovery_val = 'recovery@jeevraksha.org' if is_admin_flag else None
         cursor.execute('''
-            INSERT INTO users (full_name, email, password_hash, phone, blood_group, city, is_admin)
-            VALUES (?, ?, ?, ?, ?, ?, 0)
-        ''', (full_name, email, password_hash, phone, blood_group, city))
+            INSERT INTO users (full_name, email, password_hash, phone, blood_group, city, is_admin, recovery_email)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (full_name, email, password_hash, phone, blood_group, city, is_admin_flag, recovery_val))
         user_id = cursor.lastrowid
 
         # Also register as prospective donor if register_as_donor flag is checked
@@ -934,7 +973,7 @@ def api_register():
         session['user_name'] = full_name
         session['email'] = email
         session['blood_group'] = blood_group
-        session['is_admin'] = False
+        session['is_admin'] = bool(is_admin_flag)
 
         return jsonify({
             'success': True,

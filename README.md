@@ -189,6 +189,7 @@ The database automatically seeds realistic verified donors, hospital emergency r
 
 | Role | Username | Primary Email | Password | Recovery Email | Portal Access |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Brand Admin** | `Kasinath Baburaj` | `contactkasinathbaburaj@gmail.com` | *(Your Account Password)* | `recovery@jeevraksha.org` | `/dashboard` & `/admin/db` |
 | **Master Admin** | `Jeevraksha Master Admin` | `admin@jeevraksha.org` | `Admin@Jeevraksha2026` | `recovery@jeevraksha.org` | `/admin/login` & `/admin/db` |
 | **Verified Donor** | `Aarav Sharma` | `aarav.sharma@jeevraksha.org` | `Lifeline#2026` | — | `/dashboard` (Normal User) |
 | **Universal Donor** | `Priya Nair` | `priya.nair@jeevraksha.org` | `Lifeline#2026` | — | `/dashboard` (Normal User) |
@@ -234,14 +235,14 @@ python change_admin.py --list
 
 ## 🧪 Automated Test Suite
 
-A complete test suite covering email regex, disposable domain blocking, password complexity, authentication sessions, compatibility engine calculations, 90-day cooldown logic, strict admin security isolation, and admin password reset/recovery is included:
+A complete test suite covering email regex, disposable domain blocking, password complexity, authentication sessions, compatibility engine calculations, 90-day cooldown logic, strict admin security isolation, brand administrator designation, and admin password reset/recovery is included:
 
 ```bash
 python test_app.py
 ```
 Expected output:
 ```
-Ran 11 tests in 1.7s
+Ran 12 tests in 1.7s
 OK
 ```
 
