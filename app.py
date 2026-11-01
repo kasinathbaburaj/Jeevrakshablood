@@ -1,6 +1,7 @@
 import os
 import sys
 import re
+import urllib.parse
 import sqlite3
 from datetime import datetime, date, timedelta
 from functools import wraps
@@ -1559,6 +1560,86 @@ def api_update_request_status(req_id):
     db.commit()
 
     return jsonify({'success': True, 'message': f'Request status updated to {new_status}.', 'status': new_status})
+
+
+@app.route('/api/donors', methods=['GET'])
+def api_get_donors_readonly():
+    """
+    Read-only GET API endpoint for external integrations (e.g., KAAL).
+    Requires X-API-Key header matching KAAL_READONLY_2026.
+    Returns matching available donors and blood group summary.
+    """
+    # 1. Security: Require an X-API-Key request header matching KAAL_READONLY_2026
+    api_key = request.headers.get('X-API-Key')
+    if not api_key or api_key != 'KAAL_READONLY_2026':
+        return jsonify({
+            'error': 'Unauthorized: Missing or invalid X-API-Key header.'
+        }), 401
+
+    # 2. Filtering: Accept optional blood_group parameter (case-insensitive, handles '+' or '%2B')
+    raw_qs = request.query_string.decode('utf-8', errors='ignore')
+    m = re.search(r'blood_group=([^&]*)', raw_qs, re.IGNORECASE)
+    if m:
+        blood_group = urllib.parse.unquote(m.group(1)).strip().upper()
+    else:
+        raw_bg = request.args.get('blood_group')
+        blood_group = raw_bg.replace(' ', '+').strip().upper() if raw_bg else ''
+
+    # 3. Read-Only Safety: Connect to SQLite using absolute path and exclusively execute SELECT queries
+    db_dir = os.path.dirname(os.path.abspath(__file__))
+    db_path = os.path.join(db_dir, 'jeevraksha.db')
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+
+    try:
+        cursor = conn.cursor()
+
+        # Summary of all available donors grouped by blood group
+        cursor.execute('''
+            SELECT blood_group, COUNT(*) as cnt
+            FROM donors
+            WHERE is_available = 1
+            GROUP BY blood_group
+        ''')
+        summary_counts = {r['blood_group']: r['cnt'] for r in cursor.fetchall()}
+        blood_group_summary = {bg: summary_counts.get(bg, 0) for bg in BLOOD_GROUPS}
+        for bg, cnt in summary_counts.items():
+            if bg not in blood_group_summary:
+                blood_group_summary[bg] = cnt
+
+        # Matching available donors query (returns all available donors if blood_group is empty)
+        query = '''
+            SELECT d.id, u.full_name, d.blood_group, u.phone, d.location
+            FROM donors d
+            JOIN users u ON d.user_id = u.id
+            WHERE d.is_available = 1
+        '''
+        params = []
+        if blood_group:
+            query += " AND UPPER(d.blood_group) = ?"
+            params.append(blood_group)
+
+        query += " ORDER BY d.id ASC"
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+        donors = []
+        for r in rows:
+            donors.append({
+                'name': r['full_name'],
+                'blood_group': r['blood_group'],
+                'contact_number': r['phone'],
+                'location': r['location']
+            })
+
+        return jsonify({
+            'total_available': len(donors),
+            'blood_group_summary': blood_group_summary,
+            'donors': donors
+        }), 200
+
+    finally:
+        conn.close()
 
 
 @app.route('/api/donors/compatible', methods=['GET'])

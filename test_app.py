@@ -635,6 +635,82 @@ class JeevrakshaTestSuite(unittest.TestCase):
         self.assertIsNotNone(c.fetchone())
         conn.close()
 
+    def test_16_readonly_donors_api(self):
+        # 1. Missing X-API-Key returns 401 JSON error
+        res_no_key = self.client.get('/api/donors')
+        self.assertEqual(res_no_key.status_code, 401)
+        data_no_key = res_no_key.get_json()
+        self.assertIn('error', data_no_key)
+        self.assertIn('X-API-Key', data_no_key['error'])
+
+        # 2. Invalid X-API-Key returns 401 JSON error
+        res_bad_key = self.client.get('/api/donors', headers={'X-API-Key': 'INVALID_KEY_999'})
+        self.assertEqual(res_bad_key.status_code, 401)
+        data_bad_key = res_bad_key.get_json()
+        self.assertIn('error', data_bad_key)
+
+        # 3. Valid X-API-Key without blood_group returns all available donors
+        res_all = self.client.get('/api/donors', headers={'X-API-Key': 'KAAL_READONLY_2026'})
+        self.assertEqual(res_all.status_code, 200)
+        data_all = res_all.get_json()
+        self.assertIn('total_available', data_all)
+        self.assertIn('blood_group_summary', data_all)
+        self.assertIn('donors', data_all)
+        self.assertGreaterEqual(data_all['total_available'], 8)
+        self.assertEqual(data_all['total_available'], len(data_all['donors']))
+
+        # Verify blood_group_summary has all 8 blood groups
+        for bg in ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']:
+            self.assertIn(bg, data_all['blood_group_summary'])
+
+        # Verify donor object structure
+        first_donor = data_all['donors'][0]
+        self.assertIn('name', first_donor)
+        self.assertIn('blood_group', first_donor)
+        self.assertIn('contact_number', first_donor)
+        self.assertIn('location', first_donor)
+
+        # 4. Filter with URL-encoded '+' (%2B) e.g., O%2B
+        res_encoded = self.client.get('/api/donors?blood_group=O%2B', headers={'X-API-Key': 'KAAL_READONLY_2026'})
+        self.assertEqual(res_encoded.status_code, 200)
+        data_encoded = res_encoded.get_json()
+        self.assertGreater(data_encoded['total_available'], 0)
+        for d in data_encoded['donors']:
+            self.assertEqual(d['blood_group'], 'O+')
+
+        # 5. Filter with raw '+' in query string e.g., O+
+        res_raw_plus = self.client.get('/api/donors?blood_group=O+', headers={'X-API-Key': 'KAAL_READONLY_2026'})
+        self.assertEqual(res_raw_plus.status_code, 200)
+        data_raw_plus = res_raw_plus.get_json()
+        self.assertEqual(data_raw_plus['total_available'], data_encoded['total_available'])
+        for d in data_raw_plus['donors']:
+            self.assertEqual(d['blood_group'], 'O+')
+
+        # 6. Case-insensitivity check e.g., o+ and ab-
+        res_lower = self.client.get('/api/donors?blood_group=o+', headers={'X-API-Key': 'KAAL_READONLY_2026'})
+        self.assertEqual(res_lower.status_code, 200)
+        self.assertEqual(res_lower.get_json()['total_available'], data_encoded['total_available'])
+
+        res_ab_lower = self.client.get('/api/donors?blood_group=ab-', headers={'X-API-Key': 'KAAL_READONLY_2026'})
+        self.assertEqual(res_ab_lower.status_code, 200)
+        data_ab = res_ab_lower.get_json()
+        self.assertGreater(data_ab['total_available'], 0)
+        for d in data_ab['donors']:
+            self.assertEqual(d['blood_group'], 'AB-')
+
+        # 7. Empty blood_group parameter returns all available donors
+        res_empty = self.client.get('/api/donors?blood_group=', headers={'X-API-Key': 'KAAL_READONLY_2026'})
+        self.assertEqual(res_empty.status_code, 200)
+        self.assertEqual(res_empty.get_json()['total_available'], data_all['total_available'])
+
+        # 8. Non-matching blood group returns 0 donors but keeps summary intact
+        res_none = self.client.get('/api/donors?blood_group=UNKNOWN', headers={'X-API-Key': 'KAAL_READONLY_2026'})
+        self.assertEqual(res_none.status_code, 200)
+        data_none = res_none.get_json()
+        self.assertEqual(data_none['total_available'], 0)
+        self.assertEqual(len(data_none['donors']), 0)
+        self.assertIn('O+', data_none['blood_group_summary'])
+
 
 if __name__ == '__main__':
     unittest.main()

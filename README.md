@@ -99,6 +99,16 @@
   - **Re-Seed Demo Data Button:** One-click re-population of demo network records.
   - **Admin Logout:** Dedicated sign-out cleanly clearing administrator privileges.
 
+### 8. External Read-Only Donors API (`/api/donors`)
+- **Integration Endpoint:** Read-only access for external emergency dispatchers and third-party systems (e.g., KAAL).
+- **Authentication:** Protected via `X-API-Key: KAAL_READONLY_2026`. Missing or invalid keys return HTTP 401.
+- **Safety:** Strictly executes `SELECT` queries against SQLite using absolute path resolution (`os.path.dirname(os.path.abspath(__file__))`).
+- **Filtering:** Optional case-insensitive `blood_group` query parameter (e.g. `?blood_group=O+` or `?blood_group=O%2B`). If omitted or empty, returns all active, available donors (`is_available = 1`).
+- **Payload Structure:**
+  - `total_available`: Integer count of matching donors.
+  - `blood_group_summary`: Live dictionary counting available donors across all 8 blood groups.
+  - `donors`: List of donor objects with `name`, `blood_group`, `contact_number`, and `location`.
+
 ---
 
 ## 🗄️ Database Architecture (`jeevraksha.db`)
